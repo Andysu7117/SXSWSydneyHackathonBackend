@@ -7,20 +7,9 @@ import { neon } from '@neondatabase/serverless';
 import { eq, and } from 'drizzle-orm';
 import { Agent, createClient } from '@relevanceai/sdk';
 
-// Import schema with error handling
-let tickets, projects, people, ticketsToPeople, ticketDependencies, ticketStatusEnum;
-try {
-  const schema = require('../db/schema/schema');
-  tickets = schema.tickets;
-  projects = schema.projects;
-  people = schema.people;
-  ticketsToPeople = schema.ticketsToPeople;
-  ticketDependencies = schema.ticketDependencies;
-  ticketStatusEnum = schema.ticketStatusEnum;
-} catch (error) {
-  console.error('Failed to import schema:', error);
-  // Fallback - we'll handle this in the routes
-}
+// Import schema - use require for better serverless compatibility
+const schema = require('../db/schema/schema');
+const { tickets, projects, people, ticketsToPeople, ticketDependencies, ticketStatusEnum } = schema;
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -79,7 +68,15 @@ app.get('/health', (req, res) => {
             databaseUrl: !!process.env.DATABASE_URL,
             relevanceApiKey: !!process.env.RELEVANCE_API_KEY,
             relevanceProjectId: !!process.env.RELEVANCE_PROJECT_ID,
-            schemaImported: !!(tickets && projects && people)
+            schemaImported: !!(tickets && projects && people),
+            schemaDetails: {
+                tickets: !!tickets,
+                projects: !!projects,
+                people: !!people,
+                ticketsToPeople: !!ticketsToPeople,
+                ticketDependencies: !!ticketDependencies,
+                ticketStatusEnum: !!ticketStatusEnum
+            }
         }
     });
 });
