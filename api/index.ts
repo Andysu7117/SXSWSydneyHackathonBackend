@@ -9,68 +9,126 @@ import { Agent, createClient } from '@relevanceai/sdk';
 
 // Define schema inline to avoid import issues in serverless environment
 import {
-  serial,
-  text,
-  boolean,
-  timestamp,
-  pgTable,
-  pgEnum,
-  integer,
-  primaryKey,
-} from 'drizzle-orm/pg-core';
-
-// Define schema tables inline
-export const ticketStatusEnum = pgEnum('ticket_status', [
-  'Backlog',
-  'To Do',
-  'In Progress',
-  'In Review',
-  'Done',
-  'Cancelled',
-]);
-
-export const projects = pgTable('projects', {
-  id: serial('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
-export const people = pgTable('people', {
-  id: serial('id').primaryKey(),
-  name: text('name').notNull(),
-  email: text('email'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
-export const tickets = pgTable('tickets', {
-  id: serial('id').primaryKey(),
-  projectId: integer('project_id').references(() => projects.id),
-  title: text('title').notNull(),
-  content: text('content'),
-  decision: text('decision'),
-  consequences: text('consequences'),
-  status: ticketStatusEnum('status').default('To Do'),
-  isAiGenerated: boolean('is_ai_generated').default(false),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
-export const ticketsToPeople = pgTable('tickets_to_people', {
-  ticketId: integer('ticket_id').references(() => tickets.id),
-  personId: integer('person_id').references(() => people.id),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.ticketId, table.personId] }),
-}));
-
-export const ticketDependencies = pgTable('ticket_dependencies', {
-  ticketId: integer('ticket_id').references(() => tickets.id),
-  dependsOnTicketId: integer('depends_on_ticket_id').references(() => tickets.id),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.ticketId, table.dependsOnTicketId] }),
-}));
+    serial,
+    text,
+    boolean,
+    timestamp,
+    pgTable,
+    pgEnum,
+    integer,
+    primaryKey,
+  } from 'drizzle-orm/pg-core';
+  import { relations } from 'drizzle-orm';
+  
+  // 1. Define an enum for the ticket status
+  export const ticketStatusEnum = pgEnum('ticket_status', [
+    'Backlog',
+    'To Do',
+    'In Progress',
+    'In Review',
+    'Done',
+    'Cancelled',
+  ]);
+  
+  // 2. Projects table
+  export const projects = pgTable('projects', {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  });
+  
+  // 3. People table
+  export const people = pgTable('people', {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    email: text('email').unique(),
+  });
+  
+  // 4. Tickets table
+  export const tickets = pgTable('tickets', {
+    id: serial('id').primaryKey(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id),
+    title: text('title').notNull(),
+    content: text('content'),
+    decision: text('decision'),
+    consequences: text('consequences'),
+    status: ticketStatusEnum('status').default('To Do').notNull(),
+    isAiGenerated: boolean('is_ai_generated').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  });
+  
+  // 5. Join table for the many-to-many relationship between tickets and people
+  export const ticketsToPeople = pgTable('tickets_to_people', {
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id),
+    personId: integer('person_id')
+      .notNull()
+      .references(() => people.id),
+  }, (t) => [
+    primaryKey({ columns: [t.ticketId, t.personId] })
+  ]);
+  
+  // 6. Join table for self-referencing ticket dependencies (many-to-many)
+  export const ticketDependencies = pgTable('ticket_dependencies', {
+    // The ticket that has a dependency
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id),
+    // The ticket it depends on
+    dependsOnTicketId: integer('depends_on_ticket_id')
+      .notNull()
+      .references(() => tickets.id),
+  }, (t) => [
+    primaryKey({ columns: [t.ticketId, t.dependsOnTicketId] })
+  ]);
+  
+  // 7. Define relations
+  export const projectsRelations = relations(projects, ({ many }) => ({
+    tickets: many(tickets),
+  }));
+  
+  export const ticketsRelations = relations(tickets, ({ one, many }) => ({
+    project: one(projects, {
+      fields: [tickets.projectId],
+      references: [projects.id],
+    }),
+    people: many(ticketsToPeople),
+    dependencies: many(ticketDependencies, { relationName: 'ticket_dependencies' }),
+    dependents: many(ticketDependencies, { relationName: 'dependent_tickets' }),
+  }));
+  
+  export const peopleRelations = relations(people, ({ many }) => ({
+    tickets: many(ticketsToPeople),
+  }));
+  
+  export const ticketsToPeopleRelations = relations(ticketsToPeople, ({ one }) => ({
+    ticket: one(tickets, {
+      fields: [ticketsToPeople.ticketId],
+      references: [tickets.id],
+    }),
+    person: one(people, {
+      fields: [ticketsToPeople.personId],
+      references: [people.id],
+    }),
+  }));
+  
+  export const ticketDependenciesRelations = relations(ticketDependencies, ({ one }) => ({
+    ticket: one(tickets, {
+      fields: [ticketDependencies.ticketId],
+      references: [tickets.id],
+      relationName: 'ticket_dependencies',
+    }),
+    dependsOnTicket: one(tickets, {
+      fields: [ticketDependencies.dependsOnTicketId],
+      references: [tickets.id],
+      relationName: 'dependent_tickets',
+    }),
+  }));
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -84,6 +142,21 @@ if (!process.env.DATABASE_URL) {
 
 const sql = neon(process.env.DATABASE_URL || '');
 const db = drizzle({ client: sql });
+
+// Test database connection with better error handling
+async function testDatabaseConnection() {
+    try {
+        await sql`SELECT 1`;
+        console.log('Database connected successfully');
+        return true;
+    } catch (err) {
+        console.error('Database connection failed:', err);
+        return false;
+    }
+}
+
+// Test connection on startup
+testDatabaseConnection();
 
 // Test database connection (async, non-blocking)
 sql`SELECT 1`.then(() => {
@@ -148,6 +221,31 @@ app.get('/test', (req, res) => {
         message: 'Serverless function is working!',
         timestamp: new Date().toISOString()
     });
+});
+
+// Database tables check endpoint
+app.get('/db-check', async (req, res) => {
+    try {
+        // Check if tables exist
+        const tablesResult = await sql`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name IN ('tickets', 'projects', 'people', 'tickets_to_people', 'ticket_dependencies')
+        `;
+        
+        res.json({
+            status: 'ok',
+            tables: tablesResult,
+            connectionTest: await testDatabaseConnection()
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: (error as Error).message,
+            connectionTest: await testDatabaseConnection()
+        });
+    }
 });
 
 // Projects routes
@@ -735,12 +833,24 @@ app.get('/api/tickets/:ticketId/dependency-graph', async (req, res) => {
 app.get('/api/tickets', async (req, res) => {
     console.log('Backend: GET /api/tickets');
     try {
+        // First test basic connection
+        await sql`SELECT 1`;
+        
+        // Then try to select from tickets
         const data = await db.select().from(tickets);
         console.log('Backend: Found', data.length, 'tickets');
-    res.status(200).json(data);
+        res.status(200).json(data);
     } catch (error) {
         console.error('Database error:', error);
-        res.status(500).json({ error: (error as Error).message });
+        console.error('Error details:', {
+            message: (error as Error).message,
+            stack: (error as Error).stack,
+            name: (error as Error).name
+        });
+        res.status(500).json({ 
+            error: (error as Error).message,
+            details: 'Check server logs for more information'
+        });
     }
 });
 
