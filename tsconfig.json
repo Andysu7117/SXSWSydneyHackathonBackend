@@ -10,8 +10,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": false,
-    "outDir": "./dist",
+    "noEmit": true,
     "verbatimModuleSyntax": false
   },
   "include": [
