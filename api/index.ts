@@ -13,23 +13,33 @@ const port = process.env.PORT || 3001;
 
 const apiRouter = express.Router();
 
-const sql = neon(process.env.DATABASE_URL!);
+// Validate environment variables
+if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL environment variable is required');
+}
+
+const sql = neon(process.env.DATABASE_URL || '');
 const db = drizzle({ client: sql });
 
-// Test database connection
+// Test database connection (async, non-blocking)
 sql`SELECT 1`.then(() => {
     console.log('Database connected successfully');
 }).catch((err) => {
     console.error('Database connection failed:', err);
-    process.exit(1);
+    // Don't exit in serverless environment
 });
 
 // Initialize Relevance AI client
-const relevanceClient = createClient({
-  apiKey: process.env.RELEVANCE_API_KEY || '',
-  region: 'f1db6c' as any, // Your region
-  project: process.env.RELEVANCE_PROJECT_ID || '',
-});
+let relevanceClient;
+try {
+  relevanceClient = createClient({
+    apiKey: process.env.RELEVANCE_API_KEY || '',
+    region: 'f1db6c' as any, // Your region
+    project: process.env.RELEVANCE_PROJECT_ID || '',
+  });
+} catch (error) {
+  console.error('Failed to initialize Relevance AI client:', error);
+}
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -42,6 +52,21 @@ app.use((req, res, next) => {
 
 apiRouter.get('/', (req, res) => {
     res.json({ message: 'Hello World!' });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        environment: {
+            nodeVersion: process.version,
+            vercel: !!process.env.VERCEL,
+            databaseUrl: !!process.env.DATABASE_URL,
+            relevanceApiKey: !!process.env.RELEVANCE_API_KEY,
+            relevanceProjectId: !!process.env.RELEVANCE_PROJECT_ID
+        }
+    });
 });
 
 // Projects routes
