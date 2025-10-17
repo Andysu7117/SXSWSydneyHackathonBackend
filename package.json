@@ -1,0 +1,44 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "tsx api/index.ts",
+    "build": "tsc",
+    "dev": "tsx api/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "@relevanceai/sdk": "^3.0.0-rc.2",
+    "@supabase/supabase-js": "^2.75.0",
+    "@types/express": "^5.0.3",
+    "cors": "^2.8.5",
+    "custom-event-polyfill": "^1.0.7",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.44.6",
+    "express": "^5.1.0",
+    "neon": "^2.0.0",
+    "pg": "^8.16.3",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/pg": "^8.15.5",
+    "drizzle-kit": "^0.31.5",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
