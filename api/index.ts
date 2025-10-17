@@ -4,9 +4,23 @@ import express from 'express';
 import cors from 'cors';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
-import { tickets, projects, people, ticketsToPeople, ticketDependencies, ticketStatusEnum } from '../db/schema/schema';
 import { eq, and } from 'drizzle-orm';
 import { Agent, createClient } from '@relevanceai/sdk';
+
+// Import schema with error handling
+let tickets, projects, people, ticketsToPeople, ticketDependencies, ticketStatusEnum;
+try {
+  const schema = require('../db/schema/schema');
+  tickets = schema.tickets;
+  projects = schema.projects;
+  people = schema.people;
+  ticketsToPeople = schema.ticketsToPeople;
+  ticketDependencies = schema.ticketDependencies;
+  ticketStatusEnum = schema.ticketStatusEnum;
+} catch (error) {
+  console.error('Failed to import schema:', error);
+  // Fallback - we'll handle this in the routes
+}
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -64,8 +78,17 @@ app.get('/health', (req, res) => {
             vercel: !!process.env.VERCEL,
             databaseUrl: !!process.env.DATABASE_URL,
             relevanceApiKey: !!process.env.RELEVANCE_API_KEY,
-            relevanceProjectId: !!process.env.RELEVANCE_PROJECT_ID
+            relevanceProjectId: !!process.env.RELEVANCE_PROJECT_ID,
+            schemaImported: !!(tickets && projects && people)
         }
+    });
+});
+
+// Simple test endpoint
+app.get('/test', (req, res) => {
+    res.json({ 
+        message: 'Serverless function is working!',
+        timestamp: new Date().toISOString()
     });
 });
 
