@@ -7,9 +7,70 @@ import { neon } from '@neondatabase/serverless';
 import { eq, and } from 'drizzle-orm';
 import { Agent, createClient } from '@relevanceai/sdk';
 
-// Import schema - use require for better serverless compatibility
-const schema = require('../db/schema/schema');
-const { tickets, projects, people, ticketsToPeople, ticketDependencies, ticketStatusEnum } = schema;
+// Define schema inline to avoid import issues in serverless environment
+import {
+  serial,
+  text,
+  boolean,
+  timestamp,
+  pgTable,
+  pgEnum,
+  integer,
+  primaryKey,
+} from 'drizzle-orm/pg-core';
+
+// Define schema tables inline
+export const ticketStatusEnum = pgEnum('ticket_status', [
+  'Backlog',
+  'To Do',
+  'In Progress',
+  'In Review',
+  'Done',
+  'Cancelled',
+]);
+
+export const projects = pgTable('projects', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const people = pgTable('people', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const tickets = pgTable('tickets', {
+  id: serial('id').primaryKey(),
+  projectId: integer('project_id').references(() => projects.id),
+  title: text('title').notNull(),
+  content: text('content'),
+  decision: text('decision'),
+  consequences: text('consequences'),
+  status: ticketStatusEnum('status').default('To Do'),
+  isAiGenerated: boolean('is_ai_generated').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const ticketsToPeople = pgTable('tickets_to_people', {
+  ticketId: integer('ticket_id').references(() => tickets.id),
+  personId: integer('person_id').references(() => people.id),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.ticketId, table.personId] }),
+}));
+
+export const ticketDependencies = pgTable('ticket_dependencies', {
+  ticketId: integer('ticket_id').references(() => tickets.id),
+  dependsOnTicketId: integer('depends_on_ticket_id').references(() => tickets.id),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.ticketId, table.dependsOnTicketId] }),
+}));
 
 const app = express();
 const port = process.env.PORT || 3001;
